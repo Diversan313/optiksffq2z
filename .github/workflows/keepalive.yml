@@ -1,0 +1,30 @@
+name: OptikLink KeepAlive
+
+on:
+  schedule:
+    - cron: '0 12 */2 * *' # Запуск каждые 2 дня в 12:00 UTC
+  workflow_dispatch: # Возможность ручного запуска
+
+jobs:
+  autologin:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Чтение репозитория
+        uses: actions/checkout@v4
+
+      - name: Настройка Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Установка зависимостей и Playwright
+        run: |
+          python -m pip install --upgrade pip
+          pip install playwright
+          playwright install chromium
+          playwright install-deps
+
+      - name: Запуск авто-входа
+        env:
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+        run: python autologin.py
