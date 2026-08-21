@@ -19,25 +19,23 @@ with sync_playwright() as p:
     page.goto("https://discord.com/login")
     page.wait_for_timeout(2000)
 
-    # Внедрение токена в LocalStorage
-    page.evaluate(f"""
-        function login(token) {{
-            setInterval(() => {{
-                document.body.appendChild(document.createElement('iframe')).contentWindow.localStorage.token = `"{token}"`;
-            }}, 50);
-            setTimeout(() => {{
-                location.reload();
-            }}, 2500);
-        }}
-        login("{DISCORD_TOKEN}");
-    """)
+    # Безопасная передача токена в JS-контекст
+    page.evaluate("""(token) => {
+        setInterval(() => {
+            document.body.appendChild(document.createElement('iframe')).contentWindow.localStorage.token = `"${token}"`;
+        }, 50);
+        setTimeout(() => {
+            location.reload();
+        }, 2500);
+    }""", DISCORD_TOKEN)
+
     page.wait_for_timeout(5000)
 
     print("[!] Переход на страницу авторизации OptikLink...")
     page.goto("https://optiklink.com/auth")
     page.wait_for_timeout(5000)
 
-    # Если появляется кнопка "Авторизовать" от Discord OAuth
+    # Кликая кнопку подтверждения, если Discord запрашивает OAuth доступ
     try:
         auth_button = page.query_selector('button:has-text("Authorize")') or page.query_selector('button:has-text("Авторизовать")')
         if auth_button:
