@@ -1,7 +1,7 @@
 import os
-import time
 from playwright.sync_api import sync_playwright
 
+# Получаем токен из переменных окружения GitHub Secrets
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 
 if not DISCORD_TOKEN:
@@ -19,7 +19,7 @@ with sync_playwright() as p:
     page.goto("https://discord.com/login")
     page.wait_for_timeout(2000)
 
-    # Безопасная передача токена в JS-контекст
+    # Безопасная инъекция токена в LocalStorage
     page.evaluate("""(token) => {
         setInterval(() => {
             document.body.appendChild(document.createElement('iframe')).contentWindow.localStorage.token = `"${token}"`;
@@ -29,21 +29,34 @@ with sync_playwright() as p:
         }, 2500);
     }""", DISCORD_TOKEN)
 
-    page.wait_for_timeout(5000)
+    page.wait_for_timeout(4000)
 
     print("[!] Переход на страницу авторизации OptikLink...")
     page.goto("https://optiklink.com/auth")
-    page.wait_for_timeout(5000)
+    page.wait_for_timeout(4000)
 
-    # Кликая кнопку подтверждения, если Discord запрашивает OAuth доступ
+    # Нажатие кнопки подтверждения Discord OAuth (если появляется)
     try:
         auth_button = page.query_selector('button:has-text("Authorize")') or page.query_selector('button:has-text("Авторизовать")')
         if auth_button:
             print("[!] Нажатие кнопки 'Authorize'...")
             auth_button.click()
-            page.wait_for_timeout(5000)
+            page.wait_for_timeout(4000)
     except Exception as e:
-        print(f"[*] Кнопка подтверждения не потребовалась: {e}")
+        print(f"[*] Перенаправление прошло автоматически: {e}")
 
-    print(f"[+] Вход выполнен! Текущий заголовок страницы: {page.title()}")
+    # Переход в Dashboard и жесткая проверка успешности
+    print("[!] Проверка доступа к Dashboard...")
+    page.goto("https://optiklink.com/dashboard")
+    page.wait_for_timeout(3000)
+
+    current_url = page.url
+    if "dashboard" in current_url:
+        print(f"[+] УСПЕХ: Вход выполнен, 3-дневный таймер OptikLink сброшен! URL: {current_url}")
+    else:
+        print(f"[-] ОШИБКА: Не удалось зайти в Dashboard. Текущий URL: {current_url}")
+        browser.close()
+        # Вызов ошибки окрасит запуск в GitHub Actions в красный цвет
+        raise Exception("Авторизация не удалась. Проверьте актуальность DISCORD_TOKEN.")
+
     browser.close()
