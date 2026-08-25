@@ -3,7 +3,7 @@ name: OptikLink KeepAlive
 on:
   schedule:
     - cron: '0 12 */2 * *' # Запуск каждые 2 дня в 12:00 UTC
-  workflow_dispatch: # Возможность ручного запуска
+  workflow_dispatch: # Возможность запустить вручную через кнопку
 
 jobs:
   autologin:
