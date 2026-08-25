@@ -5,7 +5,7 @@ from playwright.sync_api import sync_playwright
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 PTERO_API_KEY = os.getenv("PTERO_API_KEY")
-SERVER_ID = os.getenv("SERVER_ID", "ba6c4e06") # ID сервера из URL control.optiklink.net
+SERVER_ID = os.getenv("SERVER_ID", "ba6c4e06")  # ID сервера из URL control.optiklink.net
 
 if not DISCORD_TOKEN:
     print("[-] КРИТИЧЕСКАЯ ОШИБКА: DISCORD_TOKEN не найден в GitHub Secrets!")
@@ -22,8 +22,7 @@ with sync_playwright() as p:
 
     # 1. Авторизация в Discord через токен
     print("[!] Авторизация в Discord...")
-    page.goto("https://discord.com/login")
-    page.wait_for_timeout(2000)
+    page.goto("https://discord.com/login", wait_until="networkidle")
 
     page.evaluate("""(token) => {
         setInterval(() => {
@@ -36,7 +35,7 @@ with sync_playwright() as p:
 
     # 2. Переход на страницу OAuth OptikLink
     print("[!] Переход на страницу авторизации OptikLink...")
-    page.goto("https://optiklink.net/auth")
+    page.goto("https://optiklink.net/auth", wait_until="domcontentloaded")
     page.wait_for_timeout(4000)
 
     # Кликом подтверждаем OAuth, если появляется кнопка Discord
@@ -49,14 +48,21 @@ with sync_playwright() as p:
     except Exception as e:
         print(f"[*] Информация об OAuth: {e}")
 
-    # 3. Переход в Dashboard и Настоящая проверка элемента
+    # 3. Переход в Dashboard и ожидание полной загрузки без редиректов
     print("[!] Переход в Dashboard и проверка авторизации...")
-    page.goto("https://optiklink.net/dashboard")
-    page.wait_for_timeout(4000)
+    page.goto("https://optiklink.net/dashboard", wait_until="networkidle")
+    page.wait_for_timeout(5000)  # Дополнительная пауза для завершения JS-редиректов
 
-    html_content = page.content()
+    # Безопасное получение HTML (защита от ошибок навигации)
+    html_content = ""
+    for _ in range(5):
+        try:
+            html_content = page.content()
+            break
+        except Exception:
+            time.sleep(2)
 
-    # Проверяем не по URL, а по наличию элементов авторизованного пользователя
+    # Проверяем элементы авторизованного пользователя
     if "Create Server" in html_content or "Logout" in html_content or "Servers" in html_content:
         print("[+] НАСТОЯЩИЙ УСПЕХ: Авторизация пройдена, 3-дневный таймер продлен!")
     else:
@@ -66,7 +72,7 @@ with sync_playwright() as p:
 
     browser.close()
 
-# 4. Автоматический запуск сервера через Pterodactyl API (с повторами при 504 ошибках)
+# 4. Автоматический запуск сервера через Pterodactyl API
 print("\n[2/2] Проверка работы Pterodactyl API и запуск сервера...")
 if PTERO_API_KEY:
     url = f"https://control.optiklink.net/api/client/servers/{SERVER_ID}/power"
@@ -101,6 +107,6 @@ if PTERO_API_KEY:
                 time.sleep(15)
 
     if not success:
-        print("[-] ВНИМАНИЕ: Не удалось отправить сигнал START через API. Запусти сервер вручную на панеле.")
+        print("[-] ВНИМАНИЕ: Не удалось отправить сигнал START через API. Запусти сервер вручную на панели.")
 else:
     print("[!] Предупреждение: PTERO_API_KEY не добавлен в Secrets. Авто-запуск выключенного сервера пропущен.")
