@@ -26,6 +26,7 @@ jobs:
 
       - name: Запуск авто-входа и авто-старта
         env:
-          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          STATE_JSON_BASE64: ${{ secrets.STATE_JSON_BASE64 }}
           PTERO_API_KEY: ${{ secrets.PTERO_API_KEY }}
+          SERVER_ID: ${{ secrets.SERVER_ID }}
         run: python autologin.py
