@@ -1,59 +1,45 @@
+import base64
 import os
 import time
 import requests
 from playwright.sync_api import sync_playwright
 
-DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 PTERO_API_KEY = os.getenv("PTERO_API_KEY")
-SERVER_ID = os.getenv("SERVER_ID", "ba6c4e06")  # ID сервера из URL control.optiklink.net
+SERVER_ID = os.getenv("SERVER_ID", "ba6c4e06")
+STATE_JSON_BASE64 = os.getenv("STATE_JSON_BASE64")
 
-if not DISCORD_TOKEN:
-    print("[-] КРИТИЧЕСКАЯ ОШИБКА: DISCORD_TOKEN не найден в GitHub Secrets!")
+# Если передана строка Base64 (например, из GitHub Secrets), распаковываем её в state.json
+if STATE_JSON_BASE64:
+    with open("state.json", "wb") as f:
+        f.write(base64.b64decode(STATE_JSON_BASE64))
+
+if not os.path.exists("state.json"):
+    print("[-] КРИТИЧЕСКАЯ ОШИБКА: Файл state.json не найден! Положите его рядом со скриптом или задайте STATE_JSON_BASE64.")
     exit(1)
 
-print("[1/2] Запуск браузера для продления 3-дневного таймера...")
+print("[1/2] Запуск браузера с сохраненной сессией для продления 3-дневного таймера...")
 
 with sync_playwright() as p:
     browser = p.chromium.launch(headless=True)
+    
+    # Загружаем сохранённый профиль куков
     context = browser.new_context(
+        storage_state="state.json",
         user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
     )
     page = context.new_page()
 
-    # 1. Авторизация в Discord через токен
-    print("[!] Авторизация в Discord...")
-    page.goto("https://discord.com/login", wait_until="networkidle")
-
-    page.evaluate("""(token) => {
-        setInterval(() => {
-            document.body.appendChild(document.createElement('iframe')).contentWindow.localStorage.token = `"${token}"`;
-        }, 50);
-        setTimeout(() => { location.reload(); }, 2500);
-    }""", DISCORD_TOKEN)
-
-    page.wait_for_timeout(5000)
-
-    # 2. Переход на страницу OAuth OptikLink
+    # 1. Переход на страницу авторизации OptikLink
     print("[!] Переход на страницу авторизации OptikLink...")
-    page.goto("https://optiklink.net/auth", wait_until="domcontentloaded")
+    page.goto("https://optiklink.net/auth", wait_until="networkidle")
     page.wait_for_timeout(4000)
 
-    # Кликом подтверждаем OAuth, если появляется кнопка Discord
-    try:
-        auth_button = page.query_selector('button:has-text("Authorize")') or page.query_selector('button:has-text("Авторизовать")')
-        if auth_button:
-            print("[!] Нажатие кнопки 'Authorize'...")
-            auth_button.click()
-            page.wait_for_timeout(5000)
-    except Exception as e:
-        print(f"[*] Информация об OAuth: {e}")
-
-    # 3. Переход в Dashboard и ожидание полной загрузки без редиректов
+    # 2. Переход в Dashboard для проверки обновления таймера
     print("[!] Переход в Dashboard и проверка авторизации...")
     page.goto("https://optiklink.net/dashboard", wait_until="networkidle")
-    page.wait_for_timeout(5000)  # Дополнительная пауза для завершения JS-редиректов
+    page.wait_for_timeout(3000)
 
-    # Безопасное получение HTML (защита от ошибок навигации)
+    # Безопасное получение HTML
     html_content = ""
     for _ in range(5):
         try:
@@ -63,16 +49,16 @@ with sync_playwright() as p:
             time.sleep(2)
 
     # Проверяем элементы авторизованного пользователя
-    if "Create Server" in html_content or "Logout" in html_content or "Servers" in html_content:
-        print("[+] НАСТОЯЩИЙ УСПЕХ: Авторизация пройдена, 3-дневный таймер продлен!")
+    if any(term in html_content for term in ["Create Server", "Logout", "Servers", "Dashboard"]):
+        print("[+] НАСТОЯЩИЙ УСПЕХ: Авторизация пройдена по кукам, 3-дневный таймер продлен!")
     else:
-        print("[-] ОШИБКА: Авторизация НЕ прошла. Скрипт попал на незалогиненную страницу.")
+        print("[-] ОШИБКА: Сессия устарела или авторизация не прошла.")
         browser.close()
-        raise Exception("Не удалось зайти в Dashboard OptikLink. Проверь DISCORD_TOKEN.")
+        raise Exception("Не удалось зайти в Dashboard. Пересоздайте файл state.json.")
 
     browser.close()
 
-# 4. Автоматический запуск сервера через Pterodactyl API
+# 3. Автоматический запуск сервера через Pterodactyl API
 print("\n[2/2] Проверка работы Pterodactyl API и запуск сервера...")
 if PTERO_API_KEY:
     url = f"https://control.optiklink.net/api/client/servers/{SERVER_ID}/power"
