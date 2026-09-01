@@ -2,8 +2,8 @@ name: OptikLink KeepAlive
 
 on:
   schedule:
-    - cron: '0 12 */2 * *' # Запуск каждые 2 дня в 12:00 UTC
-  workflow_dispatch: # Возможность запустить вручную через кнопку
+    - cron: '0 12 */2 * *'
+  workflow_dispatch:
 
 jobs:
   autologin:
@@ -27,6 +27,12 @@ jobs:
       - name: Запуск авто-входа и авто-старта
         env:
           STATE_JSON_BASE64: ${{ secrets.STATE_JSON_BASE64 }}
-          PTERO_API_KEY: ${{ secrets.PTERO_API_KEY }}
           SERVER_ID: ${{ secrets.SERVER_ID }}
         run: python autologin.py
+
+      - name: Сохранение скриншотов при ошибке
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: error-screenshots
+          path: "*.png"
