@@ -1,5 +1,6 @@
 import base64
 import os
+import re
 import time
 from playwright.sync_api import sync_playwright
 
@@ -35,10 +36,8 @@ with sync_playwright() as p:
     except Exception as e:
         print(f"[*] Предупреждение при переходе на /dashboard: {e}")
 
-    # Ждем 5 секунд, пока завершатся все фоновые JS-редиректы
     page.wait_for_timeout(5000)
 
-    # Проверяем авторизацию по ключевым элементам интерфейса
     is_authenticated = False
     for selector in ["text=Logout", "text=Dashboard", "text=Create Server", "text=Servers"]:
         try:
@@ -52,10 +51,11 @@ with sync_playwright() as p:
         print("[+] НАСТОЯЩИЙ УСПЕХ: Авторизация пройдена по кукам, 3-дневный таймер продлен!")
     else:
         print("[-] ОШИБКА: Сессия устарела или страница не загрузилась.")
+        page.screenshot(path="error_auth.png")
         browser.close()
         raise Exception("Не удалось зайти в Dashboard OptikLink. Пересоздайте state.json.")
 
-    # 2. Клик по кнопке START в панели Pterodactyl
+    # 2. Переход в панель управления сервером и запуск
     print(f"\n[2/2] Переход в панель управления сервером ({SERVER_ID}) и запуск...")
     server_url = f"https://control.optiklink.net/server/{SERVER_ID}"
     try:
@@ -63,17 +63,28 @@ with sync_playwright() as p:
     except Exception as e:
         print(f"[*] Предупреждение при открытии панели сервера: {e}")
 
-    page.wait_for_timeout(5000)
+    # Ждем 8 секунд для подгрузки консоли и кнопок Pterodactyl через WebSocket
+    page.wait_for_timeout(8000)
 
     try:
-        # Ждём появления кнопки START (до 15 секунд)
-        start_btn = page.wait_for_selector('button:has-text("START")', timeout=15000)
-        if start_btn:
+        # Регистронезависимый поиск кнопки START
+        start_btn = page.locator('button').filter(has_text=re.compile(r"^start$", re.IGNORECASE)).first
+        
+        if not start_btn.is_visible():
+            # Запасные варианты селекторов
+            start_btn = page.locator('button:has-text("START"), button:has-text("Start")').first
+
+        if start_btn.is_visible(timeout=10000):
             print("[!] Кнопка START найдена, отправляем клик...")
             start_btn.click()
             page.wait_for_timeout(5000)
             print("[+] УСПЕХ: Сервер запущен через веб-интерфейс!")
+        else:
+            page.screenshot(path="error_start_button.png")
+            print("[-] Кнопка START не найдена на странице. Скриншот сохранён в error_start_button.png")
+            print(f"[*] Текущий URL: {page.url}")
     except Exception as e:
-        print(f"[*] Не удалось нажать START (возможно, сервер уже работает): {e}")
+        page.screenshot(path="error_start_button.png")
+        print(f"[*] Не удалось нажать START: {e}")
 
     browser.close()
