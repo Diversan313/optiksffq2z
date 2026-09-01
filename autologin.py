@@ -3,7 +3,6 @@ import os
 import time
 from playwright.sync_api import sync_playwright
 
-# Защита: если secret SERVER_ID не задан или пустой (""), берем "ba6c4e06"
 SERVER_ID = os.getenv("SERVER_ID")
 if not SERVER_ID:
     SERVER_ID = "ba6c4e06"
@@ -30,27 +29,31 @@ with sync_playwright() as p:
     page = context.new_page()
 
     # 1. Продление таймера на OptikLink
-    print("[!] Переход на страницу авторизации OptikLink...")
-    try:
-        page.goto("https://optiklink.net/auth", wait_until="domcontentloaded", timeout=60000)
-    except Exception as e:
-        print(f"[*] Предупреждение при переходе на /auth: {e}")
-    page.wait_for_timeout(4000)
-
-    print("[!] Переход в Dashboard и проверка авторизации...")
+    print("[!] Переход в Dashboard OptikLink...")
     try:
         page.goto("https://optiklink.net/dashboard", wait_until="domcontentloaded", timeout=60000)
     except Exception as e:
         print(f"[*] Предупреждение при переходе на /dashboard: {e}")
-    page.wait_for_timeout(3000)
 
-    html_content = page.content()
-    if any(term in html_content for term in ["Create Server", "Logout", "Servers", "Dashboard"]):
+    # Ждем 5 секунд, пока завершатся все фоновые JS-редиректы
+    page.wait_for_timeout(5000)
+
+    # Проверяем авторизацию по ключевым элементам интерфейса
+    is_authenticated = False
+    for selector in ["text=Logout", "text=Dashboard", "text=Create Server", "text=Servers"]:
+        try:
+            if page.is_visible(selector, timeout=3000):
+                is_authenticated = True
+                break
+        except Exception:
+            pass
+
+    if is_authenticated:
         print("[+] НАСТОЯЩИЙ УСПЕХ: Авторизация пройдена по кукам, 3-дневный таймер продлен!")
     else:
-        print("[-] ОШИБКА: Сессия устарела.")
+        print("[-] ОШИБКА: Сессия устарела или страница не загрузилась.")
         browser.close()
-        raise Exception("Не удалось зайти в Dashboard OptikLink.")
+        raise Exception("Не удалось зайти в Dashboard OptikLink. Пересоздайте state.json.")
 
     # 2. Клик по кнопке START в панели Pterodactyl
     print(f"\n[2/2] Переход в панель управления сервером ({SERVER_ID}) и запуск...")
@@ -60,15 +63,17 @@ with sync_playwright() as p:
     except Exception as e:
         print(f"[*] Предупреждение при открытии панели сервера: {e}")
 
+    page.wait_for_timeout(5000)
+
     try:
-        # Ждём появления кнопки START (до 20 секунд)
-        start_btn = page.wait_for_selector('button:has-text("START")', timeout=20000)
+        # Ждём появления кнопки START (до 15 секунд)
+        start_btn = page.wait_for_selector('button:has-text("START")', timeout=15000)
         if start_btn:
             print("[!] Кнопка START найдена, отправляем клик...")
             start_btn.click()
             page.wait_for_timeout(5000)
             print("[+] УСПЕХ: Сервер запущен через веб-интерфейс!")
     except Exception as e:
-        print(f"[*] Не удалось нажать START (возможно, сервер уже работает или заблокирован): {e}")
+        print(f"[*] Не удалось нажать START (возможно, сервер уже работает): {e}")
 
     browser.close()
