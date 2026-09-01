@@ -1,14 +1,12 @@
 import base64
 import os
 import time
-import requests
 from playwright.sync_api import sync_playwright
 
-PTERO_API_KEY = os.getenv("PTERO_API_KEY")
 SERVER_ID = os.getenv("SERVER_ID", "ba6c4e06")
 STATE_JSON_BASE64 = os.getenv("STATE_JSON_BASE64")
 
-# Если передана строка Base64 (например, из GitHub Secrets), распаковываем её в state.json
+# Если передана строка Base64 (из GitHub Secrets), распаковываем её в state.json
 if STATE_JSON_BASE64:
     with open("state.json", "wb") as f:
         f.write(base64.b64decode(STATE_JSON_BASE64))
@@ -56,43 +54,24 @@ with sync_playwright() as p:
         browser.close()
         raise Exception("Не удалось зайти в Dashboard. Пересоздайте файл state.json.")
 
+    # 3. Нажатие кнопки START прямо в интерфейсе управления сервером
+    print(f"\n[2/2] Переход в панель управления сервером ({SERVER_ID}) и запуск...")
+    server_url = f"https://control.optiklink.net/server/{SERVER_ID}"
+    page.goto(server_url, wait_until="networkidle")
+    page.wait_for_timeout(5000)
+
+    try:
+        # Ищем и нажимаем кнопку START в UI
+        start_button = page.query_selector('button:has-text("START")') or page.query_selector('button:has-text("Start")')
+        
+        if start_button:
+            print("[!] Кнопка START найдена, нажимаем...")
+            start_button.click()
+            page.wait_for_timeout(5000)
+            print("[+] УСПЕХ: Команда START успешно нажата в веб-интерфейсе!")
+        else:
+            print("[*] Кнопка START не найдена. Возможно, сервер уже запущен.")
+    except Exception as e:
+        print(f"[-] Ошибка при нажатии кнопки START: {e}")
+
     browser.close()
-
-# 3. Автоматический запуск сервера через Pterodactyl API
-print("\n[2/2] Проверка работы Pterodactyl API и запуск сервера...")
-if PTERO_API_KEY:
-    url = f"https://control.optiklink.net/api/client/servers/{SERVER_ID}/power"
-    headers = {
-        "Authorization": f"Bearer {PTERO_API_KEY}",
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    }
-
-    max_retries = 5
-    success = False
-
-    for attempt in range(1, max_retries + 1):
-        try:
-            print(f"[!] Попытка {attempt}/{max_retries}: отправка сигнала START...")
-            response = requests.post(url, json={"signal": "start"}, headers=headers, timeout=20)
-
-            if response.status_code in [200, 204]:
-                print("[+] УСПЕХ: Команда START отправлена! Сервер запущен.")
-                success = True
-                break
-            elif response.status_code in [502, 503, 504]:
-                print(f"[*] Таймаут панели (Ошибка {response.status_code}). Панель лагает, ждём 15 секунд...")
-                time.sleep(15)
-            else:
-                print(f"[*] Код ответа API: {response.status_code}. Текст: {response.text[:200]}")
-                break
-        except Exception as e:
-            print(f"[-] Ошибка сети/таймаут: {e}")
-            if attempt < max_retries:
-                print("[!] Повтор через 15 секунд...")
-                time.sleep(15)
-
-    if not success:
-        print("[-] ВНИМАНИЕ: Не удалось отправить сигнал START через API. Запусти сервер вручную на панели.")
-else:
-    print("[!] Предупреждение: PTERO_API_KEY не добавлен в Secrets. Авто-запуск выключенного сервера пропущен.")
