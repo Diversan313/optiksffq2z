@@ -63,15 +63,27 @@ with sync_playwright() as p:
     except Exception as e:
         print(f"[*] Предупреждение при открытии панели сервера: {e}")
 
-    # Ждем 8 секунд для подгрузки консоли и кнопок Pterodactyl через WebSocket
-    page.wait_for_timeout(8000)
+    page.wait_for_timeout(4000)
+
+    # Если редиректнуло на логин поддомена control.optiklink.net
+    if "auth/login" in page.url or "login" in page.url:
+        print("[!] Требуется авторизация в control.optiklink.net. Нажимаем кнопку входа...")
+        login_btn = page.locator('a[href*="login"], button:has-text("Login"), a:has-text("Login"), button:has-text("Sign in"), button:has-text("Discord")').first
+        if login_btn.is_visible(timeout=5000):
+            login_btn.click()
+            page.wait_for_timeout(5000)
+            # Возвращаемся на страницу сервера после авторизации
+            page.goto(server_url, wait_until="domcontentloaded", timeout=60000)
+            page.wait_for_timeout(4000)
+
+    # Ждем подгрузки консоли и кнопок Pterodactyl
+    page.wait_for_timeout(6000)
 
     try:
         # Регистронезависимый поиск кнопки START
         start_btn = page.locator('button').filter(has_text=re.compile(r"^start$", re.IGNORECASE)).first
         
         if not start_btn.is_visible():
-            # Запасные варианты селекторов
             start_btn = page.locator('button:has-text("START"), button:has-text("Start")').first
 
         if start_btn.is_visible(timeout=10000):
@@ -81,7 +93,7 @@ with sync_playwright() as p:
             print("[+] УСПЕХ: Сервер запущен через веб-интерфейс!")
         else:
             page.screenshot(path="error_start_button.png")
-            print("[-] Кнопка START не найдена на странице. Скриншот сохранён в error_start_button.png")
+            print("[-] Кнопка START не найдена на странице. Скриншот сохраняется в Artifacts.")
             print(f"[*] Текущий URL: {page.url}")
     except Exception as e:
         page.screenshot(path="error_start_button.png")
