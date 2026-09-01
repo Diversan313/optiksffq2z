@@ -31,11 +31,17 @@ with sync_playwright() as p:
 
     # 1. Продление таймера на OptikLink
     print("[!] Переход на страницу авторизации OptikLink...")
-    page.goto("https://optiklink.net/auth", wait_until="networkidle")
+    try:
+        page.goto("https://optiklink.net/auth", wait_until="domcontentloaded", timeout=60000)
+    except Exception as e:
+        print(f"[*] Предупреждение при переходе на /auth: {e}")
     page.wait_for_timeout(4000)
 
     print("[!] Переход в Dashboard и проверка авторизации...")
-    page.goto("https://optiklink.net/dashboard", wait_until="networkidle")
+    try:
+        page.goto("https://optiklink.net/dashboard", wait_until="domcontentloaded", timeout=60000)
+    except Exception as e:
+        print(f"[*] Предупреждение при переходе на /dashboard: {e}")
     page.wait_for_timeout(3000)
 
     html_content = page.content()
@@ -49,11 +55,14 @@ with sync_playwright() as p:
     # 2. Клик по кнопке START в панели Pterodactyl
     print(f"\n[2/2] Переход в панель управления сервером ({SERVER_ID}) и запуск...")
     server_url = f"https://control.optiklink.net/server/{SERVER_ID}"
-    page.goto(server_url, wait_until="networkidle")
+    try:
+        page.goto(server_url, wait_until="domcontentloaded", timeout=60000)
+    except Exception as e:
+        print(f"[*] Предупреждение при открытии панели сервера: {e}")
 
     try:
-        # Ждём появления кнопки START (до 15 секунд)
-        start_btn = page.wait_for_selector('button:has-text("START")', timeout=15000)
+        # Ждём появления кнопки START (до 20 секунд)
+        start_btn = page.wait_for_selector('button:has-text("START")', timeout=20000)
         if start_btn:
             print("[!] Кнопка START найдена, отправляем клик...")
             start_btn.click()
