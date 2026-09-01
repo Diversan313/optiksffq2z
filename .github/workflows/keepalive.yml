@@ -28,6 +28,8 @@ jobs:
         env:
           STATE_JSON_BASE64: ${{ secrets.STATE_JSON_BASE64 }}
           SERVER_ID: ${{ secrets.SERVER_ID }}
+          PANEL_USER: ${{ secrets.PANEL_USER }}
+          PANEL_PASSWORD: ${{ secrets.PANEL_PASSWORD }}
         run: python autologin.py
 
       - name: Сохранение скриншотов при ошибке
