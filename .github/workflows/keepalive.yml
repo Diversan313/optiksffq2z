@@ -2,39 +2,41 @@ name: OptikLink KeepAlive
 
 on:
   schedule:
-    - cron: '0 12 */2 * *'
+    - cron: '0 12 */2 * *'   # каждые 2 дня в 12:00 UTC
   workflow_dispatch:
 
 jobs:
-  autologin:
+  keepalive:
     runs-on: ubuntu-latest
     steps:
-      - name: Чтение репозитория
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Настройка Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: Установка зависимостей и Playwright
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install playwright requests
+          pip install playwright
           playwright install chromium
           playwright install-deps
 
-      - name: Запуск авто-входа и авто-старта
+      - name: Run autologin
         env:
-          STATE_JSON_BASE64: ${{ secrets.STATE_JSON_BASE64 }}
           SERVER_ID: ${{ secrets.SERVER_ID }}
           PANEL_USER: ${{ secrets.PANEL_USER }}
           PANEL_PASSWORD: ${{ secrets.PANEL_PASSWORD }}
+          STATE_JSON_BASE64: ${{ secrets.STATE_JSON_BASE64 }}
+          ENABLE_SCREENSHOTS: ${{ secrets.ENABLE_SCREENSHOTS }}
         run: python autologin.py
 
-      - name: Сохранение скриншотов при ошибке
+      - name: Upload screenshots (если включены)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: error-screenshots
+          name: screenshots
           path: "*.png"
+          if-no-files-found: ignore
